@@ -1,0 +1,11 @@
+[package]
+name = "rustkit"
+version = "0.1.0"
+authors = ["Michael Wu <mwu.code@gmail.com>"]
+
+[build-dependencies]
+rust_gen = { path = "rust_gen" }
+
+[dependencies]
+objc_rustime = { path = "objc_rustime" }
+bitflags = "1.0.3"

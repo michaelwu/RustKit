@@ -1,0 +1,6 @@
+[package]
+name = "objc_rustime"
+version = "0.1.0"
+authors = ["Michael Wu <mwu.code@gmail.com"]
+
+[dependencies]
