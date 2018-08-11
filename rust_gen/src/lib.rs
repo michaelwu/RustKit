@@ -1524,20 +1524,27 @@ fn gen_file(
                     if c.cmethods.contains_key(s) {
                         continue;
                     }
-                    let mname =
-                        Ident::new(&m.rustname,
-                                                Span::call_site());
+                    let initializer = m.rustname.starts_with("init");
+                    let mname = if initializer {
+                        m.rustname.replacen("init", "new", 1)
+                    } else {
+                        m.rustname.clone()
+                    };
+                    let mname = Ident::new(&mname, Span::call_site());
                     let mut selname = "SEL_".to_owned();
                     selname.push_str(&s.replace(":", "_"));
                     let selname =
                         Ident::new(&selname, Span::call_site());
-                    let params: Vec<syn::FnArg> =
+                    let mut params: Vec<syn::FnArg> =
                         (&m.args).iter().
                         map(|a| {
                             let name = Ident::new(&a.name, Span::call_site());
                             let rawty = a.ty.rust_ty(false);
                             parse_quote!{ #name : #rawty }
                         }).collect();
+                    if !initializer {
+                        params.insert(0, parse_quote!{ &self });
+                    }
                     let params = &params;
                     let rawtypes: Vec<_> =
                         (&m.args).iter().map(|a| a.ty.raw_ty()).collect();
@@ -1587,8 +1594,14 @@ fn gen_file(
                             });
                         }
                     }
+                    let get_obj: syn::Expr =
+                        if initializer {
+                            parse_quote!(objc_allocWithZone(#classrefname))
+                        } else {
+                            parse_quote!(self as *const Self as *mut Self as *mut _)
+                        };
                     methods.push(parse_quote!{
-                        pub fn #mname(&self, #(#params),*) -> #rust_ret_ty {
+                        pub fn #mname(#(#params),*) -> #rust_ret_ty {
                             #(#setup)*
                             unsafe {
                                 let send:
@@ -1598,7 +1611,7 @@ fn gen_file(
                                         #(#rawtypes),*) -> #raw_ret_ty =
                                     mem::transmute(#msgsend as *const u8);
                                 let _ret = send(
-                                    self as *const #name as *mut #name as *mut _,
+                                    #get_obj,
                                     #selname,
                                     #(#args),*
                                 );
