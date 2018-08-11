@@ -8,4 +8,4 @@ rust_gen = { path = "rust_gen" }
 
 [dependencies]
 objc_rustime = { path = "objc_rustime" }
-bitflags = "1.0.3"
+bitflags = "1.0"
