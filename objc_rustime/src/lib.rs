@@ -37,20 +37,10 @@ macro_rules! autoreleasepool {
 }
 
 #[repr(C)]
-struct ObjCImageInfo {
-    version: u32,
-    flags: u32,
+pub struct ObjCImageInfo {
+    pub version: u32,
+    pub flags: u32,
 }
-
-/* This probably won't work for bitcode. Need to use LLVM IR metadata.
- * See llvm/docs/LangRef.rst */
-#[allow(dead_code)]
-#[link_section = "__DATA,__objc_imageinfo,regular,no_dead_strip"]
-#[export_name="\x01L_OBJC_IMAGE_INFO"]
-static IMAGEINFO: ObjCImageInfo = ObjCImageInfo {
-    version: 0,
-    flags: 0,
-};
 
 #[cfg(target_pointer_width = "32")]
 pub type Mask = u16;
