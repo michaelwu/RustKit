@@ -1237,7 +1237,7 @@ fn gen_file(
                     uses.insert(c.superclass.clone());
                 }
                 for p in &c.protocols {
-                    uses.insert(p.clone());
+                    uses.insert(format!("{}Proto", p));
                 }
                 for (_, m) in &c.cmethods {
                     for r in m.refs() {
@@ -1464,6 +1464,13 @@ fn gen_file(
                         isa: *const Class,
                     }
                 });
+                for p in &c.protocols {
+                    let protoname = format!("{}Proto", p);
+                    let proto = Ident::new(&protoname, Span::call_site());
+                    ast.items.push(parse_quote!{
+                        impl #proto for #name {}
+                    });
+                }
 
                 let mut methods: Vec<syn::ImplItem> = Vec::new();
                 for (s, m) in &c.cmethods {
