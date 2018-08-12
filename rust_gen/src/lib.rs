@@ -977,6 +977,9 @@ pub fn bind_tu(
     let mut declnames = Vec::new();
     let mut anonnames = Vec::new();
     tu.visit(|c| {
+        if let walker::Availability::NotAvailable(_) = c.availability() {
+            return walker::ChildVisit::Continue;
+        }
         match c.kind() {
             CursorKind::ObjCInterfaceDecl => {
                 let name = c.name();
