@@ -880,6 +880,7 @@ enum ItemDecl {
     Enum(EnumDecl),
     Record(RecordDecl),
     Class(ClassDecl),
+    Proto(ClassDecl),
     Typedef(TypedefDecl),
     Func(FunctionDecl),
 }
@@ -890,6 +891,7 @@ impl ItemDecl {
             ItemDecl::Enum(e) => &e.src,
             ItemDecl::Record(s) => &s.src,
             ItemDecl::Class(c) => &c.src,
+            ItemDecl::Proto(p) => &p.src,
             ItemDecl::Typedef(t) => &t.src,
             ItemDecl::Func(f) => &f.src,
         }
@@ -986,6 +988,20 @@ pub fn bind_tu(
                 let old = decls.insert(name.clone(), ItemDecl::Class(class));
                 if old.is_some() {
                     panic!("??? class {} already defined", c.name());
+                }
+                declnames.push(name);
+            },
+            CursorKind::ObjCProtocolDecl => {
+                let mut name = c.name();
+                name.push_str("Proto");
+                let proto = ClassDecl::read(&c);
+                if c.location().filename().starts_with(base_path) {
+                    println!("{:#?}", proto);
+                    cursor_dump(&c, None);
+                }
+                let old = decls.insert(name.clone(), ItemDecl::Proto(proto));
+                if old.is_some() {
+                    panic!("??? proto {} already defined", c.name());
                 }
                 declnames.push(name);
             },
@@ -1197,10 +1213,10 @@ fn gen_file(
 ) {
     let mut selectors = HashSet::new();
     for d in decls.values() {
-        if let ItemDecl::Class(c) = d {
-            if c.src.starts_with(base_path) {
-                c.collect_selectors(&mut selectors);
-            }
+        match d {
+            ItemDecl::Class(c) | ItemDecl::Proto(c) =>
+                c.collect_selectors(&mut selectors),
+            _ => {}
         }
     }
 
@@ -1216,8 +1232,10 @@ fn gen_file(
                     uses.insert(r);
                 }
             },
-            ItemDecl::Class(c) => {
-                uses.insert(c.superclass.clone());
+            ItemDecl::Class(c) | ItemDecl::Proto(c) => {
+                if !c.superclass.is_empty() {
+                    uses.insert(c.superclass.clone());
+                }
                 for p in &c.protocols {
                     uses.insert(p.clone());
                 }
@@ -1635,6 +1653,108 @@ fn gen_file(
                 });
             }
             ItemDecl::Func(_) => {}
+            ItemDecl::Proto(c) => {
+                if !c.src.starts_with(base_path) {
+                    continue;
+                }
+                let name =
+                    Ident::new(&k, Span::call_site());
+                let mut methods: Vec<syn::TraitItem> = Vec::new();
+                for (s, m) in &c.imethods {
+                    if let walker::Availability::NotAvailable(_) = m.avail {
+                        continue;
+                    }
+                    if m.args.iter().any(|a| a.ty.is_va_list()) {
+                        continue;
+                    }
+                    let mname = Ident::new(&m.rustname, Span::call_site());
+                    let mut selname = "SEL_".to_owned();
+                    selname.push_str(&s.replace(":", "_"));
+                    let selname =
+                        Ident::new(&selname, Span::call_site());
+                    let params: Vec<syn::FnArg> =
+                        (&m.args).iter().
+                        map(|a| {
+                            let name = Ident::new(&a.name, Span::call_site());
+                            let rawty = a.ty.rust_ty(false);
+                            parse_quote!{ #name : #rawty }
+                        }).collect();
+                    let params = &params;
+                    let rawtypes: Vec<_> =
+                        (&m.args).iter().map(|a| a.ty.raw_ty()).collect();
+                    let raw_ret_ty = m.retty.raw_ty();
+                    let rust_ret_ty = if m.retty.is_objc_object() || m.inter_ptr {
+                        m.retty.rust_ty(true)
+                    } else {
+                        m.retty.raw_ty()
+                    };
+                    let msgsend =
+                        Ident::new(m.retty.msg_send(), Span::call_site());
+                    let args: Vec<syn::Expr> =
+                        (&m.args).iter().
+                        map(|a| a.ty.to_raw_expr(&a.name)).collect();
+                    let setup: Vec<_> =
+                        (&m.args).iter().
+                        filter_map(|a| a.ty.conversion_setup(&a.name)).collect();
+                    let mut finish: Vec<syn::Stmt> = Vec::new();
+                    if ReturnOwnership::Autoreleased == m.ret_own &&
+                       m.retty.is_objc_object() {
+                        finish.push(parse_quote!{
+                            objc_retainAutoreleasedReturnValue(_ret as *mut _);
+                        });
+                    }
+                    if m.retty.is_objc_object() {
+                        if m.retty.is_nonnull() {
+                            finish.push(parse_quote!{
+                                let _ret = Arc::new_unchecked(_ret);
+                            });
+                        } else {
+                            finish.push(parse_quote!{
+                                let _ret = Arc::new(_ret);
+                            });
+                        }
+                    } else if m.inter_ptr {
+                        if m.retty.is_nonnull() {
+                            finish.push(parse_quote!{
+                                let _ret = &*_ret;
+                            });
+                        } else {
+                            finish.push(parse_quote!{
+                                let _ret = if _ret.is_null() {
+                                    None
+                                } else {
+                                    Some(&*_ret)
+                                };
+                            });
+                        }
+                    }
+                    methods.push(parse_quote!{
+                        fn #mname(&self, #(#params),*) -> #rust_ret_ty {
+                            #(#setup)*
+                            unsafe {
+                                let send:
+                                    unsafe extern "C" fn(
+                                        *mut Object,
+                                        SelectorRef,
+                                        #(#rawtypes),*) -> #raw_ret_ty =
+                                    mem::transmute(#msgsend as *const u8);
+                                let _ret = send(
+                                    self as *const Self as *mut Self as *mut _,
+                                    #selname,
+                                    #(#args),*
+                                );
+                                #(#finish)*
+                                _ret
+                            }
+                        }
+                    });
+                }
+                ast.items.push(parse_quote!{
+                    pub trait #name: Sized {
+                        #(#methods)*
+                    }
+                });
+            }
         }
     }
 
