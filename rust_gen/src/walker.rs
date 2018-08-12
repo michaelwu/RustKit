@@ -1172,11 +1172,7 @@ impl Ty {
     }
 
     pub fn num_protocols(&self) -> u32 {
-        let num = unsafe { clang_Type_getNumObjCProtocolRefs(self.t) };
-        if num < 0 {
-            panic!("num_protocols called on wrong type");
-        }
-        num as u32
+        unsafe { clang_Type_getNumObjCProtocolRefs(self.t) }
     }
 
     pub fn protocol_ref(&self, i: u32) -> Option<Cursor> {
@@ -1198,11 +1194,7 @@ impl Ty {
     }
 
     pub fn num_type_args(&self) -> u32 {
-        let num = unsafe { clang_Type_getNumObjCTypeArgs(self.t) };
-        if num < 0 {
-            panic!("num_type_args called on wrong type");
-        }
-        num as u32
+        unsafe { clang_Type_getNumObjCTypeArgs(self.t) }
     }
 
     pub fn type_arg(&self, i: u32) -> Option<Ty> {
