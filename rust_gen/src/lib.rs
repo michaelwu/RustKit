@@ -490,6 +490,7 @@ fn is_reserved_keyword(s: &str) -> bool {
         "priv" |
         "proc" |
         "pure" |
+        "self" |
         "virtual" |
         "yield" => true,
         _ => false,
@@ -559,8 +560,12 @@ impl MethodDecl {
                 avail = walker::Availability::NotAvailable(attr.message.clone());
             }
         }
+        let mut rustname = c.name().replace(":", "_");
+        if is_reserved_keyword(&rustname) {
+            rustname.push('_');
+        }
         MethodDecl {
-            rustname: c.name().replace(":", "_"),
+            rustname: rustname,
             avail: avail,
             args: args,
             retty: Type::read(&c.result_ty(), None, false),
