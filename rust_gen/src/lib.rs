@@ -1313,7 +1313,7 @@ fn gen_file(
         ast.items.push(parse_quote!{
             #[allow(non_upper_case_globals)]
             #[link_section="__DATA,__objc_selrefs"]
-            static mut #selname: SelectorRef = SelectorRef(&#sel[0] as *const u8);
+            pub static mut #selname: SelectorRef = SelectorRef(&#sel[0] as *const u8);
         });
     }
 
