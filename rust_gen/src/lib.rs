@@ -1157,7 +1157,7 @@ pub fn bind_tu(
 
     let mut deps = HashSet::new();
     if mods.is_empty() {
-        gen_file(&decls, &declnames, base_path, &mods, framework_name, out_path, &mut deps);
+        gen_file(&decls, &declnames, base_path, &mods, framework_name, framework_name.is_none(), out_path, &mut deps);
         return deps;
     }
 
@@ -1168,14 +1168,14 @@ pub fn bind_tu(
     {
         let mut subout_path = out_path.clone();
         subout_path.push("mod.rs");
-        gen_file(&decls, &declnames, base_path, &mods, framework_name, &subout_path, &mut deps);
+        gen_file(&decls, &declnames, base_path, &mods, framework_name, false, &subout_path, &mut deps);
     }
     for m in mods {
         let mut subbase_path = subframeworks_path.to_owned();
         subbase_path.push(&format!("{}.framework/Headers", m));
         let mut subout_path = out_path.clone();
         subout_path.push(&format!("{}.rs", m));
-        gen_file(&decls, &declnames, &subbase_path, &[], Some(&m), &subout_path, &mut deps);
+        gen_file(&decls, &declnames, &subbase_path, &[], None, false, &subout_path, &mut deps);
     }
     deps
 }
@@ -1186,6 +1186,7 @@ fn gen_file(
     base_path: &Path,
     mods: &[String],
     framework_name: Option<&str>,
+    file_mode: bool,
     out_path: &Path,
     deps: &mut HashSet<String>,
 ) {
@@ -1276,7 +1277,7 @@ fn gen_file(
         #[allow(unused_imports)]
         use objc::*;
     });
-    if framework_name.is_some() {
+    if !file_mode {
         ast.items.push(parse_quote!{
             #[allow(unused_imports)]
             use std::ptr;
