@@ -518,6 +518,7 @@ struct MethodDecl {
     retty: Type,
     ret_own: ReturnOwnership,
     inter_ptr: bool,
+    consumes_self: bool,
 }
 
 impl MethodDecl {
@@ -538,6 +539,7 @@ impl MethodDecl {
             }).collect();
         let mut ownership = ReturnOwnership::Autoreleased;
         let mut inter_ptr = false;
+        let mut consumes_self = false;
         c.visit_children(|c| {
             match c.kind() {
                 CursorKind::NSReturnsRetained =>
@@ -548,6 +550,8 @@ impl MethodDecl {
                     ownership = ReturnOwnership::Autoreleased,
                 CursorKind::ObjCReturnsInnerPointer =>
                     inter_ptr = true,
+                CursorKind::NSConsumesSelf =>
+                    consumes_self = true,
                 _ => (),
             }
             walker::ChildVisit::Continue
@@ -571,6 +575,7 @@ impl MethodDecl {
             retty: Type::read(&c.result_ty(), None, false),
             ret_own: ownership,
             inter_ptr: inter_ptr,
+            consumes_self: consumes_self,
         }
     }
     pub fn refs(&self) -> Vec<String> {
@@ -588,7 +593,7 @@ impl MethodDecl {
         if self.args.iter().any(|a| a.ty.is_va_list()) {
             return None;
         }
-        let initializer = self.rustname.starts_with("init");
+        let initializer = self.consumes_self && self.rustname.starts_with("init");
         let mname = if initializer {
             self.rustname.replacen("init", "new", 1)
         } else {
