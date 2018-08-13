@@ -105,6 +105,10 @@ pub struct Super {
     pub superclass: *const Class,
 }
 
+pub trait ObjCClass: Sized {
+    fn classref() -> ClassRef;
+}
+
 pub struct Arc<T> {
     ptr: NonNull<T>,
 }

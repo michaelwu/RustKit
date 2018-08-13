@@ -581,6 +581,112 @@ impl MethodDecl {
         self.retty.refs(&mut refs);
         refs
     }
+    pub fn gen_call(&self, s: &str, class: bool) -> Option<proc_macro2::TokenStream> {
+        if let walker::Availability::NotAvailable(_) = self.avail {
+            return None;
+        }
+        if self.args.iter().any(|a| a.ty.is_va_list()) {
+            return None;
+        }
+        let initializer = self.rustname.starts_with("init");
+        let mname = if initializer {
+            self.rustname.replacen("init", "new", 1)
+        } else {
+            self.rustname.clone()
+        };
+        let mname = Ident::new(&mname, Span::call_site());
+        let mut selname = "SEL_".to_owned();
+        selname.push_str(&s.replace(":", "_"));
+        let selname =
+            Ident::new(&selname, Span::call_site());
+        let mut params: Vec<syn::FnArg> =
+            (&self.args).iter().
+            map(|a| {
+                let name = Ident::new(&a.name, Span::call_site());
+                let rawty = a.ty.rust_ty(false);
+                parse_quote!{ #name : #rawty }
+            }).collect();
+        if !initializer && !class {
+            params.insert(0, parse_quote!{ &self });
+        }
+        let params = &params;
+        let rawtypes: Vec<_> =
+            (&self.args).iter().map(|a| a.ty.raw_ty()).collect();
+        let raw_ret_ty = self.retty.raw_ty();
+        let rust_ret_ty = if self.retty.is_objc_object() || self.inter_ptr {
+            self.retty.rust_ty(true)
+        } else {
+            self.retty.raw_ty()
+        };
+        let msgsend =
+            Ident::new(self.retty.msg_send(), Span::call_site());
+        let args: Vec<syn::Expr> =
+            (&self.args).iter().
+            map(|a| a.ty.to_raw_expr(&a.name)).collect();
+        let setup: Vec<_> =
+            (&self.args).iter().
+            filter_map(|a| a.ty.conversion_setup(&a.name)).collect();
+        let mut finish: Vec<syn::Stmt> = Vec::new();
+        if ReturnOwnership::Autoreleased == self.ret_own &&
+           self.retty.is_objc_object() {
+            finish.push(parse_quote!{
+                objc_retainAutoreleasedReturnValue(_ret as *mut _);
+            });
+        }
+        if self.retty.is_objc_object() {
+            if self.retty.is_nonnull() {
+                finish.push(parse_quote!{
+                    let _ret = Arc::new_unchecked(_ret);
+                });
+            } else {
+                finish.push(parse_quote!{
+                    let _ret = Arc::new(_ret);
+                });
+            }
+        } else if self.inter_ptr {
+            if self.retty.is_nonnull() {
+                finish.push(parse_quote!{
+                    let _ret = &*_ret;
+                });
+            } else {
+                finish.push(parse_quote!{
+                    let _ret = if _ret.is_null() {
+                        None
+                    } else {
+                        Some(&*_ret)
+                    };
+                });
+            }
+        }
+        let get_obj: syn::Expr =
+            if class {
+                parse_quote!(<Self as ObjCClass>::classref().0 as *const Object as *mut _)
+            } else if initializer {
+                parse_quote!(objc_allocWithZone(<Self as ObjCClass>::classref()))
+            } else {
+                parse_quote!(self as *const Self as *mut Self as *mut _)
+            };
+        Some(quote!{
+            fn #mname(#(#params),*) -> #rust_ret_ty {
+                #(#setup)*
+                unsafe {
+                    let send:
+                        unsafe extern "C" fn(
+                            *mut Object,
+                            SelectorRef,
+                            #(#rawtypes),*) -> #raw_ret_ty =
+                        mem::transmute(#msgsend as *const u8);
+                    let _ret = send(
+                        #get_obj,
+                        #selname,
+                        #(#args),*
+                    );
+                    #(#finish)*
+                    _ret
+                }
+            }
+        })
+    }
 }
 
 #[derive(Debug)]
@@ -1467,6 +1573,13 @@ fn gen_file(
                         isa: *const Class,
                     }
                 });
+                ast.items.push(parse_quote!{
+                    impl ObjCClass for #name {
+                        fn classref() -> ClassRef {
+                            #classrefname
+                        }
+                    }
+                });
                 for p in &c.protocols {
                     let protoname = format!("{}Proto", p);
                     let proto = Ident::new(&protoname, Span::call_site());
@@ -1477,183 +1590,25 @@ fn gen_file(
 
                 let mut methods: Vec<syn::ImplItem> = Vec::new();
                 for (s, m) in &c.cmethods {
-                    if let walker::Availability::NotAvailable(_) = m.avail {
-                        continue;
-                    }
-                    if m.args.iter().any(|a| a.ty.is_va_list()) {
-                        continue;
-                    }
-                    let mname =
-                        Ident::new(&m.rustname, Span::call_site());
-                    let mut selname = "SEL_".to_owned();
-                    selname.push_str(&s.replace(":", "_"));
-                    let selname =
-                        Ident::new(&selname, Span::call_site());
-                    let params: Vec<syn::FnArg> =
-                        (&m.args).iter().
-                        map(|a| {
-                            let name = Ident::new(&a.name, Span::call_site());
-                            let rawty = a.ty.rust_ty(false);
-                            parse_quote!{ #name : #rawty }
-                        }).collect();
-                    let params = &params;
-                    let rawtypes: Vec<_> =
-                        (&m.args).iter().map(|a| a.ty.raw_ty()).collect();
-                    let raw_ret_ty = m.retty.raw_ty();
-                    let rust_ret_ty = m.retty.rust_ty(true);
-                    let msgsend =
-                        Ident::new(m.retty.msg_send(), Span::call_site());
-                    let args: Vec<syn::Expr> =
-                        (&m.args).iter().
-                        map(|a| a.ty.to_raw_expr(&a.name)).collect();
-                    let setup: Vec<_> =
-                        (&m.args).iter().
-                        filter_map(|a| a.ty.conversion_setup(&a.name)).collect();
-                    let mut finish: Vec<syn::Stmt> = Vec::new();
-                    if ReturnOwnership::Autoreleased == m.ret_own &&
-                       m.retty.is_objc_object() {
-                        finish.push(parse_quote!{
-                            objc_retainAutoreleasedReturnValue(_ret as *mut _);
-                        });
-                    }
-                    if m.retty.is_objc_object() {
-                        if m.retty.is_nonnull() {
-                            finish.push(parse_quote!{
-                                let _ret = Arc::new_unchecked(_ret);
-                            });
-                        } else {
-                            finish.push(parse_quote!{
-                                let _ret = Arc::new(_ret);
-                            });
+                    if let Some(tokens) = m.gen_call(s, true) {
+                        let mut func = syn::parse2(tokens).unwrap();
+                        if let syn::ImplItem::Method(ref mut method) = func {
+                            method.vis = parse_quote!{pub};
                         }
+                        methods.push(func);
                     }
-                    methods.push(parse_quote!{
-                        pub fn #mname(#(#params),*) -> #rust_ret_ty {
-                            #(#setup)*
-                            unsafe {
-                                let send:
-                                    unsafe extern "C" fn(
-                                        *mut Class,
-                                        SelectorRef,
-                                        #(#rawtypes),*) -> #raw_ret_ty =
-                                    mem::transmute(#msgsend as *const u8);
-                                let _ret = send(
-                                    #classrefname.0 as *const _ as *mut _,
-                                    #selname,
-                                    #(#args),*
-                                );
-                                #(#finish)*
-                                _ret
-                            }
-                        }
-                    });
                 }
                 for (s, m) in &c.imethods {
-                    if let walker::Availability::NotAvailable(_) = m.avail {
-                        continue;
-                    }
-                    if m.args.iter().any(|a| a.ty.is_va_list()) {
-                        continue;
-                    }
                     if c.cmethods.contains_key(s) {
                         continue;
                     }
-                    let initializer = m.rustname.starts_with("init");
-                    let mname = if initializer {
-                        m.rustname.replacen("init", "new", 1)
-                    } else {
-                        m.rustname.clone()
-                    };
-                    let mname = Ident::new(&mname, Span::call_site());
-                    let mut selname = "SEL_".to_owned();
-                    selname.push_str(&s.replace(":", "_"));
-                    let selname =
-                        Ident::new(&selname, Span::call_site());
-                    let mut params: Vec<syn::FnArg> =
-                        (&m.args).iter().
-                        map(|a| {
-                            let name = Ident::new(&a.name, Span::call_site());
-                            let rawty = a.ty.rust_ty(false);
-                            parse_quote!{ #name : #rawty }
-                        }).collect();
-                    if !initializer {
-                        params.insert(0, parse_quote!{ &self });
-                    }
-                    let params = &params;
-                    let rawtypes: Vec<_> =
-                        (&m.args).iter().map(|a| a.ty.raw_ty()).collect();
-                    let raw_ret_ty = m.retty.raw_ty();
-                    let rust_ret_ty = if m.retty.is_objc_object() || m.inter_ptr {
-                        m.retty.rust_ty(true)
-                    } else {
-                        m.retty.raw_ty()
-                    };
-                    let msgsend =
-                        Ident::new(m.retty.msg_send(), Span::call_site());
-                    let args: Vec<syn::Expr> =
-                        (&m.args).iter().
-                        map(|a| a.ty.to_raw_expr(&a.name)).collect();
-                    let setup: Vec<_> =
-                        (&m.args).iter().
-                        filter_map(|a| a.ty.conversion_setup(&a.name)).collect();
-                    let mut finish: Vec<syn::Stmt> = Vec::new();
-                    if ReturnOwnership::Autoreleased == m.ret_own &&
-                       m.retty.is_objc_object() {
-                        finish.push(parse_quote!{
-                            objc_retainAutoreleasedReturnValue(_ret as *mut _);
-                        });
-                    }
-                    if m.retty.is_objc_object() {
-                        if m.retty.is_nonnull() {
-                            finish.push(parse_quote!{
-                                let _ret = Arc::new_unchecked(_ret);
-                            });
-                        } else {
-                            finish.push(parse_quote!{
-                                let _ret = Arc::new(_ret);
-                            });
+                    if let Some(tokens) = m.gen_call(s, false) {
+                        let mut func = syn::parse2(tokens).unwrap();
+                        if let syn::ImplItem::Method(ref mut method) = func {
+                            method.vis = parse_quote!{pub};
                         }
-                    } else if m.inter_ptr {
-                        if m.retty.is_nonnull() {
-                            finish.push(parse_quote!{
-                                let _ret = &*_ret;
-                            });
-                        } else {
-                            finish.push(parse_quote!{
-                                let _ret = if _ret.is_null() {
-                                    None
-                                } else {
-                                    Some(&*_ret)
-                                };
-                            });
-                        }
+                        methods.push(func);
                     }
-                    let get_obj: syn::Expr =
-                        if initializer {
-                            parse_quote!(objc_allocWithZone(#classrefname))
-                        } else {
-                            parse_quote!(self as *const Self as *mut Self as *mut _)
-                        };
-                    methods.push(parse_quote!{
-                        pub fn #mname(#(#params),*) -> #rust_ret_ty {
-                            #(#setup)*
-                            unsafe {
-                                let send:
-                                    unsafe extern "C" fn(
-                                        *mut Object,
-                                        SelectorRef,
-                                        #(#rawtypes),*) -> #raw_ret_ty =
-                                    mem::transmute(#msgsend as *const u8);
-                                let _ret = send(
-                                    #get_obj,
-                                    #selname,
-                                    #(#args),*
-                                );
-                                #(#finish)*
-                                _ret
-                            }
-                        }
-                    });
                 }
 
                 ast.items.push(parse_quote!{
@@ -1671,96 +1626,13 @@ fn gen_file(
                     Ident::new(&k, Span::call_site());
                 let mut methods: Vec<syn::TraitItem> = Vec::new();
                 for (s, m) in &c.imethods {
-                    if let walker::Availability::NotAvailable(_) = m.avail {
-                        continue;
+                    if let Some(tokens) = m.gen_call(s, false) {
+                        let func = syn::parse2(tokens).unwrap();
+                        methods.push(func);
                     }
-                    if m.args.iter().any(|a| a.ty.is_va_list()) {
-                        continue;
-                    }
-                    let mname = Ident::new(&m.rustname, Span::call_site());
-                    let mut selname = "SEL_".to_owned();
-                    selname.push_str(&s.replace(":", "_"));
-                    let selname =
-                        Ident::new(&selname, Span::call_site());
-                    let params: Vec<syn::FnArg> =
-                        (&m.args).iter().
-                        map(|a| {
-                            let name = Ident::new(&a.name, Span::call_site());
-                            let rawty = a.ty.rust_ty(false);
-                            parse_quote!{ #name : #rawty }
-                        }).collect();
-                    let params = &params;
-                    let rawtypes: Vec<_> =
-                        (&m.args).iter().map(|a| a.ty.raw_ty()).collect();
-                    let raw_ret_ty = m.retty.raw_ty();
-                    let rust_ret_ty = if m.retty.is_objc_object() || m.inter_ptr {
-                        m.retty.rust_ty(true)
-                    } else {
-                        m.retty.raw_ty()
-                    };
-                    let msgsend =
-                        Ident::new(m.retty.msg_send(), Span::call_site());
-                    let args: Vec<syn::Expr> =
-                        (&m.args).iter().
-                        map(|a| a.ty.to_raw_expr(&a.name)).collect();
-                    let setup: Vec<_> =
-                        (&m.args).iter().
-                        filter_map(|a| a.ty.conversion_setup(&a.name)).collect();
-                    let mut finish: Vec<syn::Stmt> = Vec::new();
-                    if ReturnOwnership::Autoreleased == m.ret_own &&
-                       m.retty.is_objc_object() {
-                        finish.push(parse_quote!{
-                            objc_retainAutoreleasedReturnValue(_ret as *mut _);
-                        });
-                    }
-                    if m.retty.is_objc_object() {
-                        if m.retty.is_nonnull() {
-                            finish.push(parse_quote!{
-                                let _ret = Arc::new_unchecked(_ret);
-                            });
-                        } else {
-                            finish.push(parse_quote!{
-                                let _ret = Arc::new(_ret);
-                            });
-                        }
-                    } else if m.inter_ptr {
-                        if m.retty.is_nonnull() {
-                            finish.push(parse_quote!{
-                                let _ret = &*_ret;
-                            });
-                        } else {
-                            finish.push(parse_quote!{
-                                let _ret = if _ret.is_null() {
-                                    None
-                                } else {
-                                    Some(&*_ret)
-                                };
-                            });
-                        }
-                    }
-                    methods.push(parse_quote!{
-                        fn #mname(&self, #(#params),*) -> #rust_ret_ty {
-                            #(#setup)*
-                            unsafe {
-                                let send:
-                                    unsafe extern "C" fn(
-                                        *mut Object,
-                                        SelectorRef,
-                                        #(#rawtypes),*) -> #raw_ret_ty =
-                                    mem::transmute(#msgsend as *const u8);
-                                let _ret = send(
-                                    self as *const Self as *mut Self as *mut _,
-                                    #selname,
-                                    #(#args),*
-                                );
-                                #(#finish)*
-                                _ret
-                            }
-                        }
-                    });
                 }
                 ast.items.push(parse_quote!{
-                    pub trait #name: Sized {
+                    pub trait #name: ObjCClass {
                         #(#methods)*
                     }
                 });
