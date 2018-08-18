@@ -181,14 +181,18 @@ impl Type {
                                      syn::IntSuffix::None, Span::call_site());
                 parse_quote!{ [#inner_ty; #array_len] }
             },
-            Type::Pointer(inner, _, c) => {
+            Type::Pointer(inner, nonnull, c) => {
                 let inner_ty = if let Type::Void = **inner {
                     parse_quote!{ c_void }
                 } else {
                     inner.raw_ty()
                 };
                 if let Type::FunctionProto(..) = **inner {
-                    inner_ty
+                    if *nonnull {
+                        inner_ty
+                    } else {
+                        parse_quote!{ Option<#inner_ty> }
+                    }
                 } else if *c {
                     parse_quote!{ *const #inner_ty }
                 } else {
@@ -251,7 +255,7 @@ impl Type {
             },
             Type::Pointer(inner, nonnull, c) => {
                 if let Type::FunctionProto(..) = **inner {
-                    return inner.raw_ty();
+                    return self.raw_ty();
                 }
                 let inner_ty = if let Type::Void = **inner {
                     parse_quote!{ c_void }
@@ -384,6 +388,9 @@ impl Type {
         match self {
             Type::Pointer(inner, nonnull, c) => {
                 match **inner {
+                    Type::FunctionProto(..) => {
+                        parse_quote!{ #name }
+                    },
                     Type::Pointer(ref inner2, nonnull2, c2) => {
                         let nonnull_expr = parse_quote!{ &mut #temp_name as *mut _ };
                         if *nonnull {
