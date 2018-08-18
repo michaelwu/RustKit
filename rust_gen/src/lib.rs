@@ -445,6 +445,8 @@ struct PropertyDecl {
     ty: Type,
     getter: String,
     setter: Option<String>,
+    getter_method: Option<MethodDecl>,
+    setter_method: Option<MethodDecl>,
 }
 
 impl PropertyDecl {
@@ -459,6 +461,8 @@ impl PropertyDecl {
             ty: Type::read(&c.ty(), None, false),
             getter: c.getter_name(),
             setter: setter,
+            getter_method: None,
+            setter_method: None,
         }
     }
 }
@@ -741,13 +745,16 @@ impl ClassDecl {
                 }
                 CursorKind::ObjCInstanceMethodDecl => {
                     let selname = c.name();
-                    if iprops.values().
-                        any(|p|
-                            &p.getter == &selname ||
-                            p.setter.as_ref() == Some(&selname)) {
-                        return walker::ChildVisit::Continue
+                    let decl = MethodDecl::read(&c);
+                    if let Some(p) = iprops.values_mut().find(|p| p.getter == selname) {
+                        p.getter_method = Some(decl);
+                        return walker::ChildVisit::Continue;
                     }
-                    let old = imethods.insert(selname, MethodDecl::read(&c));
+                    if let Some(p) = iprops.values_mut().find(|p| p.setter.as_ref() == Some(&selname)) {
+                        p.setter_method = Some(decl);
+                        return walker::ChildVisit::Continue;
+                    }
+                    let old = imethods.insert(selname, decl);
                     if old.is_some() {
                         panic!("????");
                     }
@@ -1359,6 +1366,18 @@ fn gen_file(
                 }
                 for p in &c.protocols {
                     uses.insert(format!("{}Proto", p));
+                }
+                for (_, p) in &c.iprops {
+                    if let Some(m) = &p.getter_method {
+                        for r in m.refs() {
+                            uses.insert(r);
+                        }
+                    }
+                    if let Some(m) = &p.setter_method {
+                        for r in m.refs() {
+                            uses.insert(r);
+                        }
+                    }
                 }
                 for (_, m) in &c.cmethods {
                     for r in m.refs() {
