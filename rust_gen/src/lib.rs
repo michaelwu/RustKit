@@ -253,7 +253,7 @@ impl Type {
                                      syn::IntSuffix::None, Span::call_site());
                 parse_quote!{ [#inner_ty; #array_len] }
             },
-            Type::Pointer(inner, nonnull, c) => {
+            Type::Pointer(inner, nonnull, _) => {
                 if let Type::FunctionProto(..) = **inner {
                     return self.raw_ty();
                 }
@@ -345,7 +345,7 @@ impl Type {
     }
 
     pub fn is_va_list(&self) -> bool {
-        if let Type::FixedArray(inner, len) = self {
+        if let Type::FixedArray(inner, _) = self {
             if let Type::Record(ref name, false) = **inner {
                 return name == "__va_list_tag";
             }
@@ -386,12 +386,12 @@ impl Type {
         let temp_name = Ident::new(&temp_name, Span::call_site());
         let name = Ident::new(name, Span::call_site());
         match self {
-            Type::Pointer(inner, nonnull, c) => {
+            Type::Pointer(inner, nonnull, _) => {
                 match **inner {
                     Type::FunctionProto(..) => {
                         parse_quote!{ #name }
                     },
-                    Type::Pointer(ref inner2, nonnull2, c2) => {
+                    Type::Pointer(..) => {
                         let nonnull_expr = parse_quote!{ &mut #temp_name as *mut _ };
                         if *nonnull {
                             nonnull_expr
@@ -451,7 +451,6 @@ struct PropertyDecl {
 
 impl PropertyDecl {
     pub fn read(c: &walker::Cursor) -> PropertyDecl {
-        let propname = c.name();
         let setter = if !c.property_attributes().readonly() {
             Some(c.setter_name())
         } else {
@@ -501,7 +500,6 @@ fn is_reserved_keyword(s: &str) -> bool {
         "priv" |
         "proc" |
         "pure" |
-        "self" |
         "virtual" |
         "yield" => true,
         _ => false,
@@ -535,7 +533,6 @@ struct MethodDecl {
 impl MethodDecl {
     pub fn read(c: &walker::Cursor) -> MethodDecl {
         let len = c.num_args();
-        let fnty = c.ty();
         let args: Vec<_> =
             (0..len).map(|x| {
                 let arg = c.arg(x);
@@ -1313,7 +1310,7 @@ pub fn bind_tu(
     let mut out_path = out_path.to_owned();
     out_path.pop();
     out_path.push(framework_name.unwrap());
-    std::fs::create_dir(&out_path);
+    let _ = std::fs::create_dir(&out_path);
     {
         let mut subout_path = out_path.clone();
         subout_path.push("mod.rs");
