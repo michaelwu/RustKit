@@ -519,6 +519,18 @@ enum ReturnOwnership {
     Autoreleased,
 }
 
+fn bind_availability(c: &walker::Cursor) -> walker::Availability {
+    let mut avail = c.availability();
+    if let walker::Availability::Available = avail {
+        let attrs = c.availability_attrs();
+        let swift_attr = attrs.iter().find(|a| a.platform == "swift" && a.unavailable);
+        if let Some(attr) = swift_attr {
+            avail = walker::Availability::NotAvailable(attr.message.clone());
+        }
+    }
+    avail
+}
+
 #[derive(Debug)]
 struct MethodDecl {
     rustname: String,
@@ -564,21 +576,13 @@ impl MethodDecl {
             }
             walker::ChildVisit::Continue
         });
-        let mut avail = c.availability();
-        if let walker::Availability::Available = avail {
-            let attrs = c.availability_attrs();
-            let swift_attr = attrs.iter().find(|a| a.platform == "swift" && a.unavailable);
-            if let Some(attr) = swift_attr {
-                avail = walker::Availability::NotAvailable(attr.message.clone());
-            }
-        }
         let mut rustname = c.name().replace(":", "_");
         if is_reserved_keyword(&rustname) {
             rustname.push('_');
         }
         MethodDecl {
             rustname: rustname,
-            avail: avail,
+            avail: bind_availability(c),
             args: args,
             retty: Type::read(&c.result_ty(), None, false),
             ret_own: ownership,
@@ -724,6 +728,9 @@ impl ClassDecl {
         let mut cmethods = HashMap::new();
         let mut imethods = HashMap::new();
         c.visit_children(|c| {
+            if let walker::Availability::NotAvailable(_) = bind_availability(&c) {
+                return walker::ChildVisit::Continue;
+            }
             match c.kind() {
                 CursorKind::UnexposedAttr => {
                     println!("Found unexposed attr {}", c.name());
@@ -970,18 +977,10 @@ impl FunctionDecl {
             c.arg_iter().map(|a|
                 (a.name(), Type::read(&a.ty(), None, false))
             ).collect();
-        let mut avail = c.availability();
-        if let walker::Availability::Available = avail {
-            let attrs = c.availability_attrs();
-            let swift_attr = attrs.iter().find(|a| a.platform == "swift" && a.unavailable);
-            if let Some(attr) = swift_attr {
-                avail = walker::Availability::NotAvailable(attr.message.clone());
-            }
-        }
         FunctionDecl {
             src: c.location().filename(),
             rustname: c.spelling(),
-            avail: avail,
+            avail: bind_availability(c),
             args: args,
             retty: Type::read(&c.result_ty(), None, false),
             variadic: c.is_variadic(),
