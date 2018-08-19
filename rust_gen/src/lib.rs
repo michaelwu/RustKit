@@ -297,18 +297,30 @@ impl Type {
     }
 
     fn refs(&self, list: &mut Vec<String>) {
+        if self.is_va_list() {
+            return;
+        }
         match self {
             Type::FixedArray(inner, _) => inner.refs(list),
             Type::Pointer(inner, ..) => inner.refs(list),
             Type::Enum(name) |
-            Type::Record(name, false) |
-            Type::Id(Some(name)) => list.push(name.clone()),
+            Type::Record(name, false) =>
+                list.push(name.clone()),
+            Type::Id(Some(name)) => {
+                let mut protoname = name.clone();
+                protoname.push_str("Proto");
+                list.push(protoname);
+            },
             Type::Class(name, ta, pl) => {
                 list.push(name.clone());
                 for t in ta {
                     t.refs(list);
                 }
-                list.extend_from_slice(&pl);
+                for p in pl {
+                    let mut protoname = p.clone();
+                    protoname.push_str("Proto");
+                    list.push(protoname);
+                }
             },
             Type::FunctionProto(args, retty, ..) => {
                 for a in args {
@@ -1215,14 +1227,20 @@ pub fn bind_tu(
                                 panic!("Expected a RecordDecl, got {:?}", decl);
                             }
                         } else if nty.kind() == TypeKind::Enum {
-                            if decls.contains_key(&decl_name) {
-                                decls.entry(decl_name.clone()).and_modify(|i| {
-                                    if let ItemDecl::Enum(ref mut e) = i {
-                                        e.rustname = c.name();
-                                    } else {
-                                        panic!("Expected a EnumDecl, got {:?}", i);
+                            if let Some(mut i) = decls.remove(&decl_name) {
+                                if let ItemDecl::Enum(ref mut e) = i {
+                                    let newname = c.name();
+                                    println!("renamed {} to {}", e.rustname, newname);
+                                    for name in declnames.as_mut_slice() {
+                                        if name == &e.rustname {
+                                            *name = newname.clone();
+                                        }
                                     }
-                                });
+                                    e.rustname = newname;
+                                } else {
+                                    panic!("Expected a EnumDecl, got {:?}", i);
+                                }
+                                decls.insert(c.name(), i);
                             } else if decl.name().is_empty() {
                                 let mut e = EnumDecl::read(&decl);
                                 e.rustname = decl_name.clone();
