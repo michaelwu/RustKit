@@ -1043,6 +1043,38 @@ impl ItemDecl {
         }
         names
     }
+    fn refs(&self) -> Vec<String> {
+        match self {
+            ItemDecl::Enum(_) => Vec::new(),
+            ItemDecl::Record(s) => s.refs(),
+            ItemDecl::Class(c) | ItemDecl::Proto(c) => {
+                let mut refs = Vec::new();
+                if !c.superclass.is_empty() {
+                    refs.push(c.superclass.clone());
+                }
+                for p in &c.protocols {
+                    refs.push(format!("{}Proto", p));
+                }
+                for (_, p) in &c.iprops {
+                    if let Some(m) = &p.getter_method {
+                        refs.append(&mut m.refs());
+                    }
+                    if let Some(m) = &p.setter_method {
+                        refs.append(&mut m.refs());
+                    }
+                }
+                for (_, m) in &c.cmethods {
+                    refs.append(&mut m.refs());
+                }
+                for (_, m) in &c.imethods {
+                    refs.append(&mut m.refs());
+                }
+                refs
+            },
+            ItemDecl::Typedef(t) => t.refs(),
+            ItemDecl::Func(f) => f.refs(),
+        }
+    }
 }
 
 pub fn bind_framework(
@@ -1367,53 +1399,8 @@ fn gen_file(
         if !d.src().starts_with(base_path) {
             continue;
         }
-        match d {
-            ItemDecl::Enum(_) => {},
-            ItemDecl::Record(s) => {
-                for r in s.refs() {
-                    uses.insert(r);
-                }
-            },
-            ItemDecl::Class(c) | ItemDecl::Proto(c) => {
-                if !c.superclass.is_empty() {
-                    uses.insert(c.superclass.clone());
-                }
-                for p in &c.protocols {
-                    uses.insert(format!("{}Proto", p));
-                }
-                for (_, p) in &c.iprops {
-                    if let Some(m) = &p.getter_method {
-                        for r in m.refs() {
-                            uses.insert(r);
-                        }
-                    }
-                    if let Some(m) = &p.setter_method {
-                        for r in m.refs() {
-                            uses.insert(r);
-                        }
-                    }
-                }
-                for (_, m) in &c.cmethods {
-                    for r in m.refs() {
-                        uses.insert(r);
-                    }
-                }
-                for (_, m) in &c.imethods {
-                    for r in m.refs() {
-                        uses.insert(r);
-                    }
-                }
-            },
-            ItemDecl::Typedef(t) => {
-                for r in t.refs() {
-                    uses.insert(r);
-                }
-            }
-            ItemDecl::Func(f) => {
-                for r in f.refs() {
-                    uses.insert(r);
-                }
-            }
+        for r in d.refs() {
+            uses.insert(r);
         }
     }
     let uses: Vec<_> = uses.iter().filter_map(|n| {
