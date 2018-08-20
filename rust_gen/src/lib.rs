@@ -318,11 +318,13 @@ impl Type {
                 for t in ta {
                     t.refs(list);
                 }
+                /*
                 for p in pl {
                     let mut protoname = p.clone();
                     protoname.push_str("Proto");
                     list.push(protoname);
                 }
+                */
             },
             Type::FunctionProto(args, retty, ..) => {
                 for a in args {
