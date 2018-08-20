@@ -312,7 +312,9 @@ impl Type {
                 list.push(protoname);
             },
             Type::Class(name, ta, pl) => {
-                list.push(name.clone());
+                if name != "Class" && name != "Protocol" {
+                    list.push(name.clone());
+                }
                 for t in ta {
                     t.refs(list);
                 }
