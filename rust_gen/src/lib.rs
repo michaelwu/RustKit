@@ -612,9 +612,15 @@ impl MethodDecl {
         self.retty.refs(&mut refs);
         refs
     }
-    pub fn gen_call(&self, s: &str, class: bool) -> Option<proc_macro2::TokenStream> {
+    pub fn gen_call(&self, decls: &HashMap<String, ItemDecl>, s: &str, class: bool) -> Option<proc_macro2::TokenStream> {
         if let walker::Availability::NotAvailable(_) = self.avail {
             return None;
+        }
+        for r in &self.refs() {
+            if !decls.contains_key(r) && r != "NSString" {
+                println!("Skipping {:?} due to reference to {}", self, r);
+                return None;
+            }
         }
         if self.args.iter().any(|a| a.ty.is_va_list()) {
             return None;
@@ -1624,7 +1630,7 @@ fn gen_file(
 
                 let mut methods: Vec<syn::ImplItem> = Vec::new();
                 for (s, m) in &c.cmethods {
-                    if let Some(tokens) = m.gen_call(s, true) {
+                    if let Some(tokens) = m.gen_call(&decls, s, true) {
                         let mut func = syn::parse2(tokens).unwrap();
                         if let syn::ImplItem::Method(ref mut method) = func {
                             method.vis = parse_quote!{pub};
@@ -1636,7 +1642,7 @@ fn gen_file(
                     if c.cmethods.contains_key(s) {
                         continue;
                     }
-                    if let Some(tokens) = m.gen_call(s, false) {
+                    if let Some(tokens) = m.gen_call(&decls, s, false) {
                         let mut func = syn::parse2(tokens).unwrap();
                         if let syn::ImplItem::Method(ref mut method) = func {
                             method.vis = parse_quote!{pub};
@@ -1660,7 +1666,7 @@ fn gen_file(
                     Ident::new(&k, Span::call_site());
                 let mut methods: Vec<syn::TraitItem> = Vec::new();
                 for (s, m) in &c.imethods {
-                    if let Some(tokens) = m.gen_call(s, false) {
+                    if let Some(tokens) = m.gen_call(&decls, s, false) {
                         let func = syn::parse2(tokens).unwrap();
                         methods.push(func);
                     }
