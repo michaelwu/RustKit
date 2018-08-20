@@ -1631,6 +1631,29 @@ fn gen_file(
                 }
 
                 let mut methods: Vec<syn::ImplItem> = Vec::new();
+                for (_, p) in &c.iprops {
+                    if c.cmethods.contains_key(&p.getter) {
+                        continue;
+                    }
+                    if let Some(m) = &p.getter_method {
+                        if let Some(tokens) = m.gen_call(&decls, &p.getter, false) {
+                            let mut func = syn::parse2(tokens).unwrap();
+                            if let syn::ImplItem::Method(ref mut method) = func {
+                                method.vis = parse_quote!{pub};
+                            }
+                            methods.push(func);
+                        }
+                    }
+                    if let Some(m) = &p.setter_method {
+                        if let Some(tokens) = m.gen_call(&decls, p.setter.as_ref().unwrap(), false) {
+                            let mut func = syn::parse2(tokens).unwrap();
+                            if let syn::ImplItem::Method(ref mut method) = func {
+                                method.vis = parse_quote!{pub};
+                            }
+                            methods.push(func);
+                        }
+                    }
+                }
                 for (s, m) in &c.cmethods {
                     if let Some(tokens) = m.gen_call(&decls, s, true) {
                         let mut func = syn::parse2(tokens).unwrap();
