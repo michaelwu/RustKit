@@ -592,7 +592,7 @@ pub enum TypeKind {
     Unexposed,
     Void,
     Bool,
-    Char_U,
+    CharU,
     UChar,
     Char16,
     Char32,
@@ -601,7 +601,7 @@ pub enum TypeKind {
     ULong,
     ULongLong,
     UInt128,
-    Char_S,
+    CharS,
     SChar,
     WChar,
     Short,
@@ -947,7 +947,7 @@ impl Ty {
             CXType_Unexposed => TypeKind::Unexposed,
             CXType_Void => TypeKind::Void,
             CXType_Bool => TypeKind::Bool,
-            CXType_Char_U => TypeKind::Char_U,
+            CXType_Char_U => TypeKind::CharU,
             CXType_UChar => TypeKind::UChar,
             CXType_Char16 => TypeKind::Char16,
             CXType_Char32 => TypeKind::Char32,
@@ -956,7 +956,7 @@ impl Ty {
             CXType_ULong => TypeKind::ULong,
             CXType_ULongLong => TypeKind::ULongLong,
             CXType_UInt128 => TypeKind::UInt128,
-            CXType_Char_S => TypeKind::Char_S,
+            CXType_Char_S => TypeKind::CharS,
             CXType_SChar => TypeKind::SChar,
             CXType_WChar => TypeKind::WChar,
             CXType_Short => TypeKind::Short,
@@ -1291,6 +1291,7 @@ impl Cursor {
         unsafe { clang_Cursor_isVariadic(self.c) != 0 }
     }
 
+    #[allow(non_upper_case_globals)]
     pub fn availability(&self) -> Availability {
         let avail = unsafe { clang_getCursorAvailability(self.c) };
         match avail {

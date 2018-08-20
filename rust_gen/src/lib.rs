@@ -60,8 +60,8 @@ impl Type {
         match t.kind() {
             TypeKind::Void => Type::Void,
             TypeKind::Bool => Type::Bool,
-            TypeKind::SChar | TypeKind::Char_S => Type::Int(true, 1),
-            TypeKind::UChar | TypeKind::Char_U => Type::Int(false, 1),
+            TypeKind::SChar | TypeKind::CharS => Type::Int(true, 1),
+            TypeKind::UChar | TypeKind::CharU => Type::Int(false, 1),
             TypeKind::Short => Type::Int(true, 2),
             TypeKind::UShort => Type::Int(false, 2),
             TypeKind::Int => Type::Int(true, 4),
@@ -311,7 +311,7 @@ impl Type {
                 protoname.push_str("Proto");
                 list.push(protoname);
             },
-            Type::Class(name, ta, pl) => {
+            Type::Class(name, ta, _pl) => {
                 if name != "Class" && name != "Protocol" {
                     list.push(name.clone());
                 }
