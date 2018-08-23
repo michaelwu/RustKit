@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = ["Michael Wu <mwu.code@gmail.com>"]
 
 [dependencies]
-clang-sys = { path = "../../clang-sys", features = ["runtime", "clang_8_0"] }
+clang-sys = { git = "https://github.com/michaelwu/clang-sys", branch = "clang-8.0", features = ["runtime", "clang_8_0"] }
 syn = { version = "0.14", features = ["full", "extra-traits"] }
 quote = "0.6"
 proc-macro2 = "0.4"
