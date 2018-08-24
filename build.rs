@@ -4,7 +4,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-extern crate rust_gen as gen;
+extern crate rustkit_bindgen as gen;
 
 use std::env;
 use std::path::Path;

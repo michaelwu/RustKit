@@ -1,7 +1,10 @@
 [package]
-name = "rust_gen"
+name = "rustkit_bindgen"
 version = "0.0.1"
 authors = ["Michael Wu <mwu.code@gmail.com>"]
+description = "The bindings generator used by RustKit"
+repository = "https://github.com/michaelwu/RustKit"
+license = "Apache-2.0/MIT"
 
 [dependencies]
 clang-sys = { git = "https://github.com/michaelwu/clang-sys", branch = "clang-8.0", features = ["runtime", "clang_8_0"] }

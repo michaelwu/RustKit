@@ -9,7 +9,7 @@ readme = "README.md"
 license = "Apache-2.0/MIT"
 
 [build-dependencies]
-rust_gen = { path = "rust_gen", version = "0.0.1" }
+rustkit_bindgen = { path = "rustkit_bindgen", version = "0.0.1" }
 
 [dependencies]
 bitflags = "1.0"
