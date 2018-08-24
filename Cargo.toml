@@ -1,11 +1,16 @@
 [package]
 name = "rustkit"
 version = "0.0.1"
+
 authors = ["Michael Wu <mwu.code@gmail.com>"]
+description = "Fast and ergonomic Rust bindings for ObjC APIs"
+repository = "https://github.com/michaelwu/RustKit"
+readme = "README.md"
+license = "Apache-2.0/MIT"
 
 [build-dependencies]
-rust_gen = { path = "rust_gen" }
+rust_gen = { path = "rust_gen", version = "0.0.1" }
 
 [dependencies]
-objc_rustime = { path = "objc_rustime" }
+objc_rustime = { path = "objc_rustime", version = "0.0.1" }
 bitflags = "1.0"
