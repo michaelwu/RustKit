@@ -7,7 +7,7 @@ repository = "https://github.com/michaelwu/RustKit"
 license = "Apache-2.0/MIT"
 
 [dependencies]
-clang-sys = { git = "https://github.com/michaelwu/clang-sys", branch = "clang-8.0", features = ["runtime", "clang_8_0"] }
+rustkit-clang-sys = { version = "0.24", features = ["runtime", "clang_8_0"] }
 syn = { version = "0.14", features = ["full", "extra-traits"] }
 quote = "0.6"
 proc-macro2 = "0.4"

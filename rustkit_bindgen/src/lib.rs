@@ -4,7 +4,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-extern crate clang_sys as clang;
+extern crate rustkit_clang_sys as clang;
 #[macro_use]
 extern crate syn;
 #[macro_use]
