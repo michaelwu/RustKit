@@ -12,5 +12,4 @@ license = "Apache-2.0/MIT"
 rust_gen = { path = "rust_gen", version = "0.0.1" }
 
 [dependencies]
-objc_rustime = { path = "objc_rustime", version = "0.0.1" }
 bitflags = "1.0"

@@ -5,6 +5,7 @@
 // except according to those terms.
 
 use std::ptr::NonNull;
+use std::ops::Deref;
 
 /* We use a macro instead of a struct so the user can't try to move
  * or drop the AutoreleasePool and screw up the order of the pops.
@@ -146,7 +147,7 @@ impl<T> Drop for Arc<T> {
     }
 }
 
-impl<T> std::ops::Deref for Arc<T> {
+impl<T> Deref for Arc<T> {
     type Target = T;
 
     fn deref(&self) -> &T {

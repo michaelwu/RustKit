@@ -1,6 +1,7 @@
-extern crate objc_rustime as objc;
 #[macro_use]
 extern crate bitflags;
+
+pub mod objc;
 
 use std::mem;
 use std::ptr;
