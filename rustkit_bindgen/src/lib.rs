@@ -745,10 +745,33 @@ impl ClassDecl {
         println!("{}", c.name());
         let mut superclass = String::new();
         let mut protocols = Vec::new();
-        let mut cprops = HashMap::new();
-        let mut iprops: HashMap<String, PropertyDecl> = HashMap::new();
-        let mut cmethods = HashMap::new();
-        let mut imethods = HashMap::new();
+        c.visit_children(|c| {
+            match c.kind() {
+                CursorKind::ObjCSuperClassRef => {
+                    superclass = c.name();
+                }
+                CursorKind::ObjCProtocolRef => {
+                    protocols.push(c.name());
+                }
+                _ => {}
+            }
+            return walker::ChildVisit::Continue;
+        });
+        let mut decl = ClassDecl {
+            src: c.location().filename(),
+            rustname: c.name(),
+            superclass: superclass,
+            protocols: protocols,
+            cprops: HashMap::new(),
+            iprops: HashMap::new(),
+            cmethods: HashMap::new(),
+            imethods: HashMap::new(),
+        };
+        decl.read_category(c);
+        decl
+    }
+
+    pub fn read_category(&mut self, c: &walker::Cursor) {
         c.visit_children(|c| {
             if let walker::Availability::NotAvailable(_) = bind_availability(&c) {
                 return walker::ChildVisit::Continue;
@@ -757,14 +780,8 @@ impl ClassDecl {
                 CursorKind::UnexposedAttr => {
                     println!("Found unexposed attr {}", c.name());
                 }
-                CursorKind::ObjCSuperClassRef => {
-                    superclass = c.name();
-                }
-                CursorKind::ObjCProtocolRef => {
-                    protocols.push(c.name());
-                }
                 CursorKind::ObjCClassMethodDecl => {
-                    let old = cmethods.insert(c.name(), MethodDecl::read(&c));
+                    let old = self.cmethods.insert(c.name(), MethodDecl::read(&c));
                     if old.is_some() {
                         panic!("????");
                     }
@@ -772,15 +789,15 @@ impl ClassDecl {
                 CursorKind::ObjCInstanceMethodDecl => {
                     let selname = c.name();
                     let decl = MethodDecl::read(&c);
-                    if let Some(p) = iprops.values_mut().find(|p| p.getter == selname) {
+                    if let Some(p) = self.iprops.values_mut().find(|p| p.getter == selname) {
                         p.getter_method = Some(decl);
                         return walker::ChildVisit::Continue;
                     }
-                    if let Some(p) = iprops.values_mut().find(|p| p.setter.as_ref() == Some(&selname)) {
+                    if let Some(p) = self.iprops.values_mut().find(|p| p.setter.as_ref() == Some(&selname)) {
                         p.setter_method = Some(decl);
                         return walker::ChildVisit::Continue;
                     }
-                    let old = imethods.insert(selname, decl);
+                    let old = self.imethods.insert(selname, decl);
                     if old.is_some() {
                         panic!("????");
                     }
@@ -789,12 +806,12 @@ impl ClassDecl {
                     let classprop = c.property_attributes().class();
                     let decl = PropertyDecl::read(&c);
                     if classprop {
-                        let old = cprops.insert(c.name(), decl);
+                        let old = self.cprops.insert(c.name(), decl);
                         if old.is_some() {
                             panic!("Duplicate class property declaration");
                         }
                     } else {
-                        let old = iprops.insert(c.name(), decl);
+                        let old = self.iprops.insert(c.name(), decl);
                         if old.is_some() {
                             panic!("Duplicate property declaration");
                         }
@@ -809,16 +826,6 @@ impl ClassDecl {
             };
             return walker::ChildVisit::Continue;
         });
-        ClassDecl {
-            src: c.location().filename(),
-            rustname: c.name(),
-            superclass: superclass,
-            protocols: protocols,
-            cprops: cprops,
-            iprops: iprops,
-            cmethods: cmethods,
-            imethods: imethods,
-        }
     }
 
     pub fn collect_selectors(&self, h: &mut HashSet<String>) {
@@ -1156,6 +1163,28 @@ pub fn bind_tu(
             return walker::ChildVisit::Continue;
         }
         match c.kind() {
+            CursorKind::ObjCCategoryDecl => {
+                let class = ClassDecl::read(&c);
+                if c.location().filename().starts_with(base_path) {
+                    println!("{:#?}", class);
+                    cursor_dump(&c, None);
+                }
+                let mut classname = String::new();
+                c.visit_children(|c| {
+                    match c.kind() {
+                        CursorKind::ObjCClassRef => {
+                            classname = c.name();
+                        }
+                        _ => {}
+                    }
+                    return walker::ChildVisit::Continue;
+                });
+                decls.entry(classname).and_modify(|e|
+                    if let ItemDecl::Class(ref mut class) = e {
+                        class.read_category(&c);
+                    }
+                );
+            }
             CursorKind::ObjCInterfaceDecl => {
                 let name = c.name();
                 let class = ClassDecl::read(&c);
