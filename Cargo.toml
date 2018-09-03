@@ -13,3 +13,28 @@ rustkit_bindgen = { path = "rustkit_bindgen", version = "0.0.1" }
 
 [dependencies]
 bitflags = "1.0"
+
+[features]
+default = ["RK_Foundation"]
+
+RK_AVFoundation = []
+RK_AVKit = []
+RK_AppKit = []
+RK_AudioToolbox = []
+RK_CoreAudio = []
+RK_CoreData = []
+RK_CoreFoundation = []
+RK_CoreGraphics = []
+RK_CoreImage = []
+RK_CoreMedia = []
+RK_CoreServices = []
+RK_CoreVideo = []
+RK_DiskArbitration = []
+RK_Foundation = []
+RK_IOSurface = []
+RK_ImageIO = []
+RK_MediaToolbox = []
+RK_Metal = []
+RK_OpenGL = []
+RK_QuartzCore = []
+RK_Security = []

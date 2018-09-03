@@ -1120,7 +1120,7 @@ pub fn bind_framework(
     let idx = walker::Index::new().unwrap();
     let framework_include = format!("-F{}/System/Library/Frameworks", sdk_path_str);
     let system_include_path = format!("-I{}/usr/include", sdk_path_str);
-    let args = vec![
+    let mut args = vec![
         "-ObjC",
         "-fobjc-arc",
         "-fno-objc-exceptions",
@@ -1129,6 +1129,10 @@ pub fn bind_framework(
         &system_include_path,
         include_path.to_str().unwrap(),
     ];
+    if framework_name == "IOSurface" {
+        args.push("-include");
+        args.push("IOSurface/IOSurfaceObjC.h");
+    }
     let tu = idx.parse_tu(&args).unwrap();
     let mut out_path = out_dir.to_owned();
     out_path.push(&format!("{}.rs", framework_name));
@@ -1447,6 +1451,35 @@ fn gen_file(
         }
     }
 
+    fn gen_framework_sel_attr(decls: &HashMap<String, ItemDecl>, framework_name: Option<&str>, refs: &[String]) -> Option<syn::Attribute> {
+        let mut frameworks = HashSet::new();
+        for r in refs {
+            let target_framework = if let Some(itemdecl) = decls.get(r) {
+                let name = itemdecl.framework_name();
+                if let Some(name) = name.last() {
+                    name.to_owned()
+                } else {
+                    continue;
+                }
+            } else {
+                continue;
+            };
+            if let Some(framework) = framework_name {
+                if framework == target_framework {
+                    continue;
+                }
+            }
+            if target_framework == "Foundation" {
+                continue;
+            }
+            frameworks.insert(format!("RK_{}", target_framework));
+        }
+        if frameworks.is_empty() {
+            None
+        } else {
+            Some(parse_quote!(#[cfg(all(#(feature = #frameworks),*))]))
+        }
+    }
     let mut uses = HashSet::new();
     for d in decls.values() {
         if !d.src().starts_with(base_path) {
@@ -1517,6 +1550,11 @@ fn gen_file(
         });
     }
 
+    let mut framework_feature_check: Vec<syn::Attribute> = Vec::new();
+    if let Some(framework_name) = framework_name {
+        let feature_name = format!("RK_{}", framework_name);
+        framework_feature_check.push(parse_quote!(#[cfg(feature = #feature_name)]));
+    }
     for s in selectors {
         let mut sel = s.as_bytes().to_owned();
         sel.push(0);
@@ -1680,6 +1718,9 @@ fn gen_file(
                             let mut func = syn::parse2(tokens).unwrap();
                             if let syn::ImplItem::Method(ref mut method) = func {
                                 method.vis = parse_quote!{pub};
+                                if let Some(cfg) = gen_framework_sel_attr(decls, framework_name, &m.refs()) {
+                                    method.attrs.push(cfg);
+                                }
                             }
                             methods.push(func);
                         }
@@ -1689,6 +1730,9 @@ fn gen_file(
                             let mut func = syn::parse2(tokens).unwrap();
                             if let syn::ImplItem::Method(ref mut method) = func {
                                 method.vis = parse_quote!{pub};
+                                if let Some(cfg) = gen_framework_sel_attr(decls, framework_name, &m.refs()) {
+                                    method.attrs.push(cfg);
+                                }
                             }
                             methods.push(func);
                         }
@@ -1699,6 +1743,9 @@ fn gen_file(
                         let mut func = syn::parse2(tokens).unwrap();
                         if let syn::ImplItem::Method(ref mut method) = func {
                             method.vis = parse_quote!{pub};
+                            if let Some(cfg) = gen_framework_sel_attr(decls, framework_name, &m.refs()) {
+                                method.attrs.push(cfg);
+                            }
                         }
                         methods.push(func);
                     }
@@ -1711,12 +1758,17 @@ fn gen_file(
                         let mut func = syn::parse2(tokens).unwrap();
                         if let syn::ImplItem::Method(ref mut method) = func {
                             method.vis = parse_quote!{pub};
+                            if let Some(cfg) = gen_framework_sel_attr(decls, framework_name, &m.refs()) {
+                                method.attrs.push(cfg);
+                            }
                         }
                         methods.push(func);
                     }
                 }
 
+                let framework_feature_check = framework_feature_check.clone();
                 ast.items.push(parse_quote!{
+                    #(#framework_feature_check)*
                     impl #name {
                         #(#methods)*
                     }
@@ -1732,7 +1784,13 @@ fn gen_file(
                 let mut methods: Vec<syn::TraitItem> = Vec::new();
                 for (s, m) in &c.imethods {
                     if let Some(tokens) = m.gen_call(&decls, s, false) {
-                        let func = syn::parse2(tokens).unwrap();
+                        let mut func = syn::parse2(tokens).unwrap();
+                        if let syn::TraitItem::Method(ref mut method) = func {
+                            if let Some(cfg) = gen_framework_sel_attr(decls, framework_name, &m.refs()) {
+                                method.attrs.push(cfg);
+                            }
+                            method.attrs.extend(framework_feature_check.iter().cloned());
+                        }
                         methods.push(func);
                     }
                 }
@@ -1785,6 +1843,7 @@ fn gen_file(
 
     if let Some(framework_name) = framework_name {
         ast.items.push(parse_quote!{
+            #(#framework_feature_check)*
             #[link(name=#framework_name, kind="framework")]
             extern "C" {
                 #(#funcs)*
