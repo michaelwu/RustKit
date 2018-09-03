@@ -1442,34 +1442,6 @@ fn gen_file(
             uses.insert(r);
         }
     }
-    let uses: Vec<_> = uses.iter().filter_map(|n| {
-        match decls.get(n) {
-            Some(d) => {
-                if d.src().starts_with(base_path) {
-                    None
-                } else {
-                    let name = d.framework_name();
-                    let n = Ident::new(n, Span::call_site());
-                    let mut path: syn::Path = parse_quote!{ #n };
-                    for comp in &name {
-                        let comp = Ident::new(comp, Span::call_site());
-                        path = parse_quote!{ #comp::#path };
-                    }
-                    if let Some(comp) = name.iter().last() {
-                        deps.insert(comp.to_owned());
-                    }
-                    Some(path)
-                }
-            }
-            None => {
-                if n == "NSString" {
-                    Some(parse_quote!{ Foundation::NSString })
-                } else {
-                    None
-                }
-            }
-        }
-    }).collect();
     let mut ast = syn::File {
         shebang: None,
         attrs: Vec::new(),
@@ -1494,9 +1466,34 @@ fn gen_file(
             use c_void;
         });
     }
-    ast.items.extend(uses.iter().map(|p| {
-        parse_quote!{
-            use #p;
+    ast.items.extend(uses.iter().filter_map(|n| {
+        match decls.get(n) {
+            Some(d) => {
+                if d.src().starts_with(base_path) {
+                    None
+                } else {
+                    let name = d.framework_name();
+                    let n = Ident::new(n, Span::call_site());
+                    let mut path: syn::Path = parse_quote!{ #n };
+                    for comp in &name {
+                        let comp = Ident::new(comp, Span::call_site());
+                        path = parse_quote!{ #comp::#path };
+                    }
+                    if let Some(comp) = name.iter().last() {
+                        deps.insert(comp.to_owned());
+                    }
+                    Some(parse_quote!{
+                        use #path;
+                    })
+                }
+            }
+            None => {
+                if n == "NSString" {
+                    Some(parse_quote!{ use Foundation::NSString; })
+                } else {
+                    None
+                }
+            }
         }
     }));
     for m in mods {
