@@ -1118,15 +1118,18 @@ pub fn bind_framework(
     include_path.push(&format!("{}.h", framework_name));
     let sdk_path_str = sdk_path.to_str().unwrap();
     let idx = walker::Index::new().unwrap();
-    let tu =
-        idx.parse_tu(&[
-            "-ObjC",
-            "-fobjc-arc",
-            "-fno-objc-exceptions",
-            "-fobjc-abi-version=2",
-            &format!("-F{}/System/Library/Frameworks", sdk_path_str),
-            &format!("-I{}/usr/include", sdk_path_str),
-        ], &include_path).unwrap();
+    let framework_include = format!("-F{}/System/Library/Frameworks", sdk_path_str);
+    let system_include_path = format!("-I{}/usr/include", sdk_path_str);
+    let args = vec![
+        "-ObjC",
+        "-fobjc-arc",
+        "-fno-objc-exceptions",
+        "-fobjc-abi-version=2",
+        &framework_include,
+        &system_include_path,
+        include_path.to_str().unwrap(),
+    ];
+    let tu = idx.parse_tu(&args).unwrap();
     let mut out_path = out_dir.to_owned();
     out_path.push(&format!("{}.rs", framework_name));
     bind_tu(&tu, &framework_path, Some(framework_name), &out_path)
@@ -1143,15 +1146,18 @@ pub fn bind_file(
 
     let sdk_path_str = sdk_path.to_str().unwrap();
     let idx = walker::Index::new().unwrap();
-    let tu =
-        idx.parse_tu(&[
-            "-ObjC",
-            "-fobjc-arc",
-            "-fno-objc-exceptions",
-            "-fobjc-abi-version=2",
-            &format!("-F{}/System/Library/Frameworks", sdk_path_str),
-            &format!("-I{}/usr/include", sdk_path_str),
-        ], &header_path).unwrap();
+    let framework_include = format!("-F{}/System/Library/Frameworks", sdk_path_str);
+    let system_include_path = format!("-I{}/usr/include", sdk_path_str);
+    let args = vec![
+        "-ObjC",
+        "-fobjc-arc",
+        "-fno-objc-exceptions",
+        "-fobjc-abi-version=2",
+        &framework_include,
+        &system_include_path,
+        header_path.to_str().unwrap(),
+    ];
+    let tu = idx.parse_tu(&args).unwrap();
     let mut out_path = out_dir.to_owned();
     out_path.push(&format!("{}.rs", header_path.file_stem().unwrap().to_str().unwrap()));
     bind_tu(&tu, &header_path, None, &out_path);

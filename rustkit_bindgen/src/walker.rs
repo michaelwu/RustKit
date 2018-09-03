@@ -5,7 +5,7 @@
 // except according to those terms.
 
 use std::ptr;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::marker::PhantomData;
 use std::mem;
 use std::ffi::{CStr, CString};
@@ -1467,16 +1467,15 @@ impl Index {
         })
     }
 
-    pub fn parse_tu(&self, args: &[&str], p: &Path) ->
+    pub fn parse_tu(&self, args: &[&str]) ->
         Option<TranslationUnit> {
         let cstrargs: Vec<_> = args.iter().map(|s| CString::new(s.as_bytes()).unwrap()).collect();
         let cargs: Vec<_> = cstrargs.iter().map(|s| s.as_bytes().as_ptr()).collect();
-        let file = CString::new(p.to_str()?.as_bytes()).unwrap();
         let mut tu: CXTranslationUnit = ptr::null_mut();
         let ret = unsafe {
             clang_parseTranslationUnit2(
                 self.idx,
-                file.as_bytes().as_ptr() as *const _,
+                ptr::null(),
                 cargs.as_ptr() as _, cargs.len() as i32,
                 ptr::null_mut(), 0,
                 CXTranslationUnit_IncludeAttributedTypes |
