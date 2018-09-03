@@ -932,6 +932,14 @@ impl RecordDecl {
                             return walker::ChildVisit::Continue;
                         }
                     }
+                    if let Type::FixedArray(ref inner, ..) = ty {
+                        if let Type::Record(ref name, ..) = **inner {
+                            if name.is_empty() {
+                                println!("Skipping field to array of anon records in {}.{}", struct_name, name);
+                                return walker::ChildVisit::Continue;
+                            }
+                        }
+                    }
                     fields.push((name, ty));
                 }
                 CursorKind::StructDecl | CursorKind::UnionDecl => {
