@@ -813,7 +813,7 @@ impl ClassDecl {
                     } else {
                         let old = self.iprops.insert(c.name(), decl);
                         if old.is_some() {
-                            panic!("Duplicate property declaration");
+                            println!("Duplicate property declaration - {} in {}", c.name(), self.rustname);
                         }
                     }
                 }
