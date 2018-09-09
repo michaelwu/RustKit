@@ -107,6 +107,8 @@ pub struct Super {
 }
 
 pub trait ObjCClass: Sized {
+    const START: usize;
+    const SIZE: usize;
     fn classref() -> ClassRef;
 }
 

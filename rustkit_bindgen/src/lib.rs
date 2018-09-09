@@ -733,6 +733,7 @@ struct ClassDecl {
     src: PathBuf,
     rustname: String,
     superclass: String,
+    size: u64,
     protocols: Vec<String>,
     cprops: HashMap<String, PropertyDecl>,
     iprops: HashMap<String, PropertyDecl>,
@@ -757,10 +758,16 @@ impl ClassDecl {
             }
             return walker::ChildVisit::Continue;
         });
+        let size = if c.kind() == CursorKind::ObjCInterfaceDecl {
+            c.ty().size()
+        } else {
+            0
+        };
         let mut decl = ClassDecl {
             src: c.location().filename(),
             rustname: c.name(),
             superclass: superclass,
+            size: size,
             protocols: protocols,
             cprops: HashMap::new(),
             iprops: HashMap::new(),
@@ -1693,8 +1700,19 @@ fn gen_file(
                         isa: *const Class,
                     }
                 });
+                let instance_size =
+                    syn::LitInt::new(c.size,
+                                     syn::IntSuffix::None, Span::call_site());
+                let start: syn::Expr = if c.superclass.is_empty() {
+                    parse_quote!(0)
+                } else {
+                    let superclass = Ident::new(&c.superclass, Span::call_site());
+                    parse_quote!(<#superclass as ObjCClass>::SIZE)
+                };
                 ast.items.push(parse_quote!{
                     impl ObjCClass for #name {
+                        const START: usize = #start;
+                        const SIZE: usize = #instance_size;
                         fn classref() -> ClassRef {
                             #classrefname
                         }

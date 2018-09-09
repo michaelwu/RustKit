@@ -1171,6 +1171,14 @@ impl Ty {
         size as u64
     }
 
+    pub fn size(&self) -> u64 {
+        let size = unsafe { clang_Type_getSizeOf(self.t) };
+        if size < 0 {
+            panic!("Negative type size???");
+        }
+        size as u64
+    }
+
     pub fn num_protocols(&self) -> u32 {
         unsafe { clang_Type_getNumObjCProtocolRefs(self.t) }
     }
