@@ -4,7 +4,7 @@ Fast and ergonomic Rust bindings for ObjC APIs
 RustKit is currently under development. Please try it if you want to contribute or provide feedback on the generated bindings.
 
 ## Prerequisites
-Clang 8.0 (currently trunk) with a [patch](https://reviews.llvm.org/D50318) is currently required. Build clang and set the `LIBCLANG_PATH` environmental variable to the directory that `libclang.dylib` is in, which should be in the `lib` directory of your clang/llvm build directory.
+Clang 8.0 (currently trunk) is currently required. Build clang and set the `LIBCLANG_PATH` environmental variable to the directory that `libclang.dylib` is in, which should be in the `lib` directory of your clang/llvm build directory.
 
 ## Example
 
