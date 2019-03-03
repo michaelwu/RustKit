@@ -640,10 +640,16 @@ impl MethodDecl {
             Ident::new(&selname, Span::call_site());
         let mut params: Vec<syn::FnArg> =
             (&self.args).iter().
-            map(|a| {
-                let name = Ident::new(&a.name, Span::call_site());
+            scan(Vec::new(), |names, a| {
+                let name = &a.name;
+                let name = match names.iter().filter(|n| **n == name).count() {
+                    0 => name.to_string(),
+                    n => format!("{}_{}", name, n + 1)
+                };
+                names.push(&a.name);
+                let name = Ident::new(&name, Span::call_site());
                 let rawty = a.ty.rust_ty(false);
-                parse_quote!{ #name : #rawty }
+                Some(parse_quote!{ #name : #rawty })
             }).collect();
         if !initializer && !class {
             params.insert(0, parse_quote!{ &self });
